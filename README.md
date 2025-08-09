@@ -135,3 +135,52 @@ This is the skeleton of the final executable. It contains placeholders (`{{PLACE
 11. It allocates memory in the new suspended process, writes the payload there, and queues an APC pointing to the payload.
 12. It resumes the new process's main thread. The thread immediately executes the APC, running the payload.
 13. The `loader.exe` process exits cleanly, leaving the payload running in the memory of the spoofed, trusted process.
+
+## Advanced Evasion & Anti-Analysis Techniques
+
+To achieve a higher degree of evasion and remain undetected by security software and malware analysts, the loader employs a comprehensive suite of anti-analysis techniques. These checks are designed to detect and thwart common debugging, sandboxing, and automated analysis environments. The philosophy is simple: if the loader suspects it is being analyzed, it will terminate immediately rather than revealing its payload.
+
+These checks are orchestrated by the `PerformAntiAnalysisChecks` function, which uses a **Scoring System**. Each detected anomaly adds points to a `detection_points` counter. If the counter exceeds a `threshold`, the loader exits. This prevents a single, potentially false-positive check from terminating the program, making the detection more robust and reliable.
+
+---
+
+### 1. Anti-Debugging
+
+This category focuses on detecting whether a debugger is attached to the loader's process. Debugging is the primary method an analyst uses to step through code and understand its behavior.
+
+-   **PEB `BeingDebugged` Flag:** The most common check. The `IsDebuggerPresent()` WinAPI function is often hooked by security tools. To bypass this, we directly access the **Process Environment Block (PEB)** in memory. The PEB contains a byte-sized flag, `BeingDebugged`, which the OS sets to `1` when a debugger is attached. We check this flag manually via `__readgsqword(0x60)` on x64 systems.
+
+-   **Remote Debugger Check:** Uses the `CheckRemoteDebuggerPresent()` API. While still an API call, it's less commonly hooked than `IsDebuggerPresent` and is essential for detecting debuggers that are attached from another machine or process.
+
+-   **Hardware Breakpoints:** Debuggers use special CPU registers (`Dr0` through `Dr3`) to set hardware breakpoints, which are very difficult for a program to detect. Our loader reads the current thread's context using `GetThreadContext` and directly checks if any of these debug registers are non-zero. If they are, it's a very high-confidence indicator of an active debugger.
+
+-   **Timing Anomalies:** When a debugger is attached and stepping through code, the execution time is significantly distorted. This check measures the time it takes for a `Sleep(500)` call to complete. In a normal environment, this will take approximately 500 milliseconds. In a debugger, as the analyst steps over the function, the elapsed time will be much longer. This detects manual analysis.
+
+---
+
+### 2. Anti-Virtualization & Sandbox Evasion
+
+Automated security tools execute suspicious files in isolated virtual machines (VMs) or sandboxes to observe their behavior. These checks aim to identify the artificial nature of these environments.
+
+-   **Known VM Artifacts (Hardware):**
+    -   **Disk & Graphics Drivers:** Uses the `SetupDiGetClassDevsA` API to enumerate hardware devices. It specifically looks for device IDs containing strings like `"qemu"`, `"vbox"`, `"vmware"`, or `"virtualbox"`. The presence of these indicates well-known hypervisors.
+    -   **MAC Address:** Scans the MAC addresses of the system's network adapters. Virtualization platforms like VMware and VirtualBox use specific OUI (Organizationally Unique Identifier) prefixes for their virtual network cards (e.g., `00:05:69`, `00:0C:29`, `08:00:27`). The loader checks against a list of these known VM prefixes.
+    -   **KVM Drivers:** Specifically checks for the existence of known Kernel-based Virtual Machine (KVM) driver files in `System32\drivers`, such as `vioinput.sys` or `netkvm.sys`.
+
+-   **Hypervisor CPU Flag:** Modern CPUs have a virtualization extension. The `__cpuid` instruction can be used to query CPU features. A specific bit (the "hypervisor present" bit at position 31 of the ECX register after calling leaf `1`) is set if the code is running under a hypervisor. This is a very reliable low-level check.
+
+-   **Common Sandbox Usernames:** Many sandboxes use default or generic usernames like `"Sandbox"`, `"maltest"`, `"CurrentUser"`, or `"WDAGUtilityAccount"`. The loader retrieves the current username via `GetUserNameA` and checks it against a blacklist of these common, non-human names.
+
+-   **Small Screen Resolution:** Automated sandboxes often run headless (without a real display) and default to small, legacy screen resolutions like 800x600. The loader calls `GetSystemMetrics` to check the screen size. If it's below a realistic modern threshold, it's considered suspicious.
+
+---
+
+### 3. Behavioral & Environmental Checks
+
+These checks look for signs of a real, interactive user and a normal operating environment, which are often absent in an analysis sandbox.
+
+-   **Human Activity Check:** This is a powerful behavioral check. The loader records the mouse cursor's position at the start. It then enters a loop, periodically checking the cursor's position again. If the mouse has not moved after a significant period (e.g., 5 minutes), it assumes no human is present and terminates. An automated sandbox will almost never simulate realistic mouse movement.
+
+-   **Internet Connectivity:** Some sandboxes intentionally block or redirect internet access to prevent a malicious payload from connecting to its C2 server. The loader attempts a simple TCP connection to a highly-available public DNS server (Google's `8.8.8.8` on port `53`). If this basic connection fails, it's a strong indicator of a restricted or offline analysis environment.
+
+---
